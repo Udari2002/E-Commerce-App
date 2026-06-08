@@ -8,25 +8,37 @@ export const inngest = new Inngest({ id: "quickcart-next" });
 
 /**
  * 1. Inngest function to save a new user to MongoDB when created via Clerk
+ * Uses upsert to allow safe retries in the Inngest dashboard!
  */
 export const syncUserCreation = inngest.createFunction(
   { 
     id: 'sync-user-from-clerk',
-    triggers: [{ event: 'clerk/user.created' }] // ✅ Modern Syntax
+    triggers: [{ event: 'clerk/user.created' }]
   },
   async ({ event }) => {
     const { id, email_addresses, first_name, last_name, image_url } = event.data;
 
+    const email = email_addresses?.[0]?.email_address || "";
+    
+    // Safety check: log it to your Vercel logs so you can monitor it live
+    console.log(`Processing creation for user: ${id}, Email extracted: "${email}"`);
+
     const userData = {
-      _id: id,
       name: `${first_name || ''} ${last_name || ''}`.trim() || "QuickCart User",
-      email: email_addresses?.[0]?.email_address || "",
+      email: email,
       imageUrl: image_url,
     };
 
     await connectDB();
-    await User.create(userData);
-    console.log(`🚀 User ${id} successfully synced and created in MongoDB.`);
+    
+    // Using findOneAndUpdate with upsert: true makes your function safe to RERUN!
+    await User.findOneAndUpdate(
+      { _id: id },
+      { $set: userData },
+      { upsert: true, new: true, runValidators: true }
+    );
+
+    console.log(`🚀 User ${id} successfully synced and created/updated in MongoDB.`);
   }
 );
 
@@ -36,7 +48,7 @@ export const syncUserCreation = inngest.createFunction(
 export const syncUserUpdate = inngest.createFunction(
   { 
     id: 'sync-user-update-from-clerk',
-    triggers: [{ event: 'clerk/user.updated' }] // ✅ Modern Syntax
+    triggers: [{ event: 'clerk/user.updated' }]
   },
   async ({ event }) => {
     const { id, email_addresses, first_name, last_name, image_url } = event.data;
@@ -48,7 +60,7 @@ export const syncUserUpdate = inngest.createFunction(
     };
 
     await connectDB();
-    await User.findByIdAndUpdate(id, userData);
+    await User.findByIdAndUpdate(id, userData, { runValidators: true });
     console.log(`🔄 User ${id} successfully updated in MongoDB.`);
   }
 );
@@ -59,7 +71,7 @@ export const syncUserUpdate = inngest.createFunction(
 export const syncUserDeletion = inngest.createFunction(
   { 
     id: 'delete-user-with-clerk',
-    triggers: [{ event: 'clerk/user.deleted' }] // ✅ Modern Syntax
+    triggers: [{ event: 'clerk/user.deleted' }]
   },
   async ({ event }) => {
     const { id } = event.data;
