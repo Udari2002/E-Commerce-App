@@ -1,26 +1,27 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
-// 🔓 Define your public routes (routes anyone/any service can access)
+// 🔓 Force these routes to be completely unprotected
 const isPublicRoute = createRouteMatcher([
   '/',
   '/all-products',
-  '/api/inngest(.*)' // 👈 This allows Inngest to bypass Clerk authentication safely
-])
+  '/api/inngest(.*)' // 👈 This catches all incoming methods (GET, POST, PUT) for Inngest
+]);
 
-export default clerkMiddleware(async (auth, request) => {
-  // If the incoming request is NOT a public route, protect it with Clerk
-  if (!isPublicRoute(request)) {
-    await auth.protect()
+export default clerkMiddleware(async (auth, req) => {
+  // If the request matches our public routes list, do not run auth.protect()
+  if (isPublicRoute(req)) {
+    return;
   }
-})
+  
+  // Protect everything else
+  await auth.protect();
+});
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
+    // Skip Next.js internals and all static files
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
+    // Always run for API and trpc routes
     '/(api|trpc)(.*)',
-    // Always run for Clerk-specific frontend API routes
-    '/__clerk/(.*)',
   ],
-}
+};
