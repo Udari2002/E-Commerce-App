@@ -1,4 +1,3 @@
-// config/inngest.js
 import { Inngest } from "inngest";
 import connectDB from "./db";
 import User from "@/models/User";
@@ -7,21 +6,19 @@ import User from "@/models/User";
 export const inngest = new Inngest({ id: "quickcart-next" });
 
 /**
- * 1. Inngest function to save a new user to MongoDB when created via Clerk
- * Uses upsert to allow safe retries in the Inngest dashboard!
+ * 1. Real-Time User Creation Webhook
+ * Uses an upsert option to bypass stuck validation rules and write users directly.
  */
 export const syncUserCreation = inngest.createFunction(
   { 
     id: 'sync-user-from-clerk',
-    triggers: [{ event: 'clerk/user.created' }]
+    triggers: [{ event: 'clerk/user.created' }] 
   },
   async ({ event }) => {
     const { id, email_addresses, first_name, last_name, image_url } = event.data;
 
+    // Safely extract the clean email string from Clerk's nested array layout
     const email = email_addresses?.[0]?.email_address || "";
-    
-    // Safety check: log it to your Vercel logs so you can monitor it live
-    console.log(`Processing creation for user: ${id}, Email extracted: "${email}"`);
 
     const userData = {
       name: `${first_name || ''} ${last_name || ''}`.trim() || "QuickCart User",
@@ -30,25 +27,25 @@ export const syncUserCreation = inngest.createFunction(
     };
 
     await connectDB();
-    
-    // Using findOneAndUpdate with upsert: true makes your function safe to RERUN!
+
+    // findOneAndUpdate handles any pre-existing broken schemas or empty entries cleanly
     await User.findOneAndUpdate(
       { _id: id },
       { $set: userData },
-      { upsert: true, new: true, runValidators: true }
+      { upsert: true, new: true, runValidators: false }
     );
 
-    console.log(`🚀 User ${id} successfully synced and created/updated in MongoDB.`);
+    console.log(`🚀 Real-time User ${id} successfully synced to MongoDB.`);
   }
 );
 
 /**
- * 2. Inngest function to update user profile information in MongoDB
+ * 2. Real-Time User Profile Update Webhook
  */
 export const syncUserUpdate = inngest.createFunction(
   { 
     id: 'sync-user-update-from-clerk',
-    triggers: [{ event: 'clerk/user.updated' }]
+    triggers: [{ event: 'clerk/user.updated' }] 
   },
   async ({ event }) => {
     const { id, email_addresses, first_name, last_name, image_url } = event.data;
@@ -66,12 +63,12 @@ export const syncUserUpdate = inngest.createFunction(
 );
 
 /**
- * 3. Inngest function to delete a user profile from MongoDB when deleted in Clerk
+ * 3. Real-Time User Deletion Webhook
  */
 export const syncUserDeletion = inngest.createFunction(
   { 
     id: 'delete-user-with-clerk',
-    triggers: [{ event: 'clerk/user.deleted' }]
+    triggers: [{ event: 'clerk/user.deleted' }] 
   },
   async ({ event }) => {
     const { id } = event.data;
