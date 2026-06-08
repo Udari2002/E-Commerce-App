@@ -1,6 +1,18 @@
-import { clerkMiddleware } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-export default clerkMiddleware()
+// 🔓 Define your public routes (routes anyone/any service can access)
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/all-products',
+  '/api/inngest(.*)' // 👈 This allows Inngest to bypass Clerk authentication safely
+])
+
+export default clerkMiddleware(async (auth, request) => {
+  // If the incoming request is NOT a public route, protect it with Clerk
+  if (!isPublicRoute(request)) {
+    await auth.protect()
+  }
+})
 
 export const config = {
   matcher: [
